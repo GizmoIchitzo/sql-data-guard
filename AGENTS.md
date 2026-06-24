@@ -6,56 +6,75 @@ This guide focuses on repository-specific gotchas, commands, and architecture th
 
 ### Critical: pyproject.toml Version Gotcha
 - `pyproject.toml` contains `version = "UPDATED-BY-WORKFLOW"`. This is non-PEP-440 compliant.
-- **Consequence**: Modern strict package managers/parsers like `uv` or `poetry` will fail with TOML parsing errors.
-- **Remedy**: Use standard `venv` and `pip` for installation, or temporarily patch `version = "0.0.1"` if `uv`/`poetry` must be used.
+- **Consequence**: Modern strict workspace commands like `uv sync` will fail with TOML parsing errors.
+- **Remedy**:
+  - **Option A (Standard/Recommended)**: Temporarily change the version string in `pyproject.toml` to a valid PEP-440 compliant version like `"0.1.0"` (or use the already patched version in dev), then use standard `uv add` and `uv sync` workspace commands:
+    ```bash
+    # Synchronize all workspace dependency groups
+    UV_NATIVE_TLS=true uv sync --all-groups
 
-### Setup Commands
-To set up the development environment:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt -r test/test.requirements.txt
-```
+    # Add a new dependency to a specific group
+    UV_NATIVE_TLS=true uv add --group dev <package>
+    ```
 
 ---
 
 ## Verifying Changes (Testing)
 
 ### Run Unit Tests
-Unit tests include files ending in `_unit.py` and `test_verification_utils.py` (which is often missed because it does not end in `_unit.py`):
+Unit tests are located under `tests/unit/`:
 ```bash
-PYTHONPATH=src python -m pytest --color=yes test/*_unit.py test/test_verification_utils.py
+PYTHONPATH=src pytest --color=yes tests/unit/
 ```
 
 ### Run a Focused Test
 ```bash
-PYTHONPATH=src python -m pytest test/test_verification_utils.py -k "test_split_to_expressions_matching"
+PYTHONPATH=src pytest tests/unit/test_verification_utils.py -k "test_split_to_expressions_matching"
 ```
 
 ### LLM Integration Tests
-- Location: `test/test_sql_guard_llm.py`
+- Location: `tests/integration/test_sql_guard_llm.py`
 - **Quirk**: Requires AWS Bedrock permissions configured via AWS environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, and optionally `AWS_SESSION_TOKEN`). Do not run them locally if AWS credentials are missing.
 - Command:
   ```bash
-  PYTHONPATH=src python -m pytest --color=yes test/test_sql_guard_llm.py
+  PYTHONPATH=src pytest --color=yes tests/integration/test_sql_guard_llm.py
   ```
+
+---
+
+## Compiling Documentation
+
+To build the interactive HTML documentation locally:
+```bash
+PYTHONPATH=src sphinx-build -b html docs/ docs/_build/html
+```
+The output will be generated under `docs/_build/html/index.html`.
 
 ---
 
 ## Architecture & Sub-project Boundaries
 
 ### Core Library
-- Located in `src/sql_data_guard/`.
+- Located in `src/sql_data_guard/core/`.
+- No FastAPI, Uvicorn, or Docker imports are permitted here to ensure library users have zero dependency overhead beyond `sqlglot`.
 - Uses the `sqlglot` library to parse, analyze, and rewrite SQL queries.
 
-### REST API
-- Located in `src/sql_data_guard/rest/sql_data_guard_rest.py`.
-- Run/build using Flask and configured via `Dockerfile`.
+### REST API Service
+- Located in `src/sql_data_guard/api/main.py`.
+- Built using **FastAPI** and **Pydantic V2**.
+- Configured via `Dockerfile` and run using Uvicorn.
+- Runs locally via:
+  ```bash
+  uvicorn sql_data_guard.api.main:app --host 0.0.0.0 --port 5000 --reload
+  ```
 
-### MCP Wrapper
-- Located in `src/sql_data_guard/mcpwrapper/mcp_wrapper.py`.
+### MCP Wrapper Service
+- Located in `src/sql_data_guard/mcp/wrapper.py`.
 - Managed/packaged via `wrapper.Dockerfile`.
-- **How it works**: Intercepts standard JSON-RPC stdin/stdout streams between the MCP client and an inner MCP server container (e.g. SQLite or Postgres). It parses, verifies, and optionally rewrites the SQL queries before passing them to the inner container.
+- Runs locally via:
+  ```bash
+  python -m sql_data_guard.mcp.wrapper
+  ```
 
 ### Dify Plugin
 - Located in `plugins/dify/`.

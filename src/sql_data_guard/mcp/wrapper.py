@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import threading
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 import docker
 

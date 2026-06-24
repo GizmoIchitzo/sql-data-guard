@@ -85,10 +85,16 @@ Here is a table with more examples of SQL queries and their corresponding JSON o
 This table provides a variety of SQL queries and their corresponding JSON outputs, demonstrating how `sql-data-guard` handles different scenarios.
 
 ## Installation
-To install sql-data-guard, use pip:
+To add sql-data-guard to your project with uv:
 
 ```bash
-pip install sql-data-guard
+uv add sql-data-guard
+```
+
+Or with optional service extras (e.g. for the REST API):
+
+```bash
+uv add "sql-data-guard[api]"
 ```
 
 ## Docker Repository
